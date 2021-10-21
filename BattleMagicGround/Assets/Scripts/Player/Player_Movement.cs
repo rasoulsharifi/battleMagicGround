@@ -3,39 +3,122 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public class Player_Movement : MonoBehaviour
-{
-    // variables
-    [SerializeField] private float playerSpeed;
+{    
+    [Header("Movement")]
+    [SerializeField] private float walkSpeed;
+    [SerializeField] private float runSpeed;
+    [HideInInspector] public Vector3 moveDirection;
+    private float moveSpeed;
+    
+    [Header("Rotation")]
+    [SerializeField] private float turnSmoothTime;
+    private float turnSmoothVelocity;
+    
+    [Header("Jump")]    
+    [SerializeField] private float groundDistance;
+    [SerializeField] private LayerMask groundMask;
+    [SerializeField] private float gravity;
+    [SerializeField] private float jumpHeight;
+    private bool isGrounded;
+    private Vector3 velocity;
+        
 
     // references
+    private CharacterController controller;
+    private Transform cam;
     private Animator anim;
 
-    void Start()
+    private void Start()
     {
-        anim = GetComponent<Animator>();
+        controller = GetComponent<CharacterController>();
+        cam = Camera.main.transform;
+        anim = GetComponentInChildren<Animator>();
+
+        Cursor.lockState = CursorLockMode.Locked;
     }
 
-    void Update()
+    private void Update()
     {
-        float x = Input.GetAxis("Horizontal");
-        float z = Input.GetAxis("Vertical");
-        Vector3 movement = new Vector3(x, 0, z);
-        transform.position += movement * Time.deltaTime * playerSpeed;
+        Move();
 
-           
+        
+    }
 
-        if (movement != Vector3.zero)
+    private void Move()
+    {        
+        float horizontal = Input.GetAxis("Horizontal");
+        float vertical = Input.GetAxis("Vertical");
+
+        moveDirection = new Vector3(horizontal, 0, vertical).normalized;
+
+
+        if (moveDirection.magnitude >= .1f && !Input.GetKey(KeyCode.LeftShift))
         {
-            anim.SetBool("run", true);
+            Walk();
+        }
+        else if (moveDirection.magnitude >= .1f && Input.GetKey(KeyCode.LeftShift))
+        {
+            Run();
+        }
+        else if (moveDirection.magnitude == 0)
+        {
+            Idle();
+        }
 
-            transform.rotation = Quaternion.Slerp
-                (transform.rotation, Quaternion.LookRotation(movement), .3f);
+        isGrounded = Physics.CheckSphere(transform.position, groundDistance, groundMask);
+
+        if (isGrounded && velocity.y < 0)
+        {
+            velocity.y = -2f;
         }
         else
         {
-            anim.SetBool("run", false);
+            anim.SetFloat("moveSpeed", 0);
         }
 
-        
-     }
+        moveDirection *= moveSpeed;
+
+        if (moveDirection.magnitude >= 0.1f)
+        {
+            float targetAngle = Mathf.Atan2(moveDirection.x, moveDirection.z) * Mathf.Rad2Deg + cam.eulerAngles.y;
+            float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, targetAngle,
+                ref turnSmoothVelocity, turnSmoothTime);
+            transform.rotation = Quaternion.Euler(0f, angle, 0f);
+
+            Vector3 moveDir = Quaternion.Euler(0f, targetAngle, 0f) * Vector3.forward;
+            controller.Move(moveDir.normalized * moveSpeed * Time.deltaTime);
+        }
+
+        if (Input.GetButtonDown("Jump") && isGrounded)
+        {
+            Jump();
+        }
+
+        velocity.y += gravity * Time.deltaTime;
+        controller.Move(velocity * Time.deltaTime);
+    }
+
+    void Idle()
+    {
+        moveSpeed = 0;
+        anim.SetFloat("moveSpeed", 0f, .1f, Time.deltaTime);
+    }
+
+    void Walk()
+    {
+        moveSpeed = walkSpeed;
+        anim.SetFloat("moveSpeed", .5f, .1f, Time.deltaTime);
+    }
+    void Run()
+    {
+        moveSpeed = runSpeed;
+        anim.SetFloat("moveSpeed", 1f, .1f, Time.deltaTime);
+    }
+
+    void Jump()
+    {        
+        velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);    
+    }
+   
 }
+
